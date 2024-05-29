@@ -1,0 +1,13 @@
+[package]
+name = "fanbox-archive-tools"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5.4", features = ["derive"] }
+imagesize = "0.12.0"
+mime_guess = "2.0.4"
+rayon = "1.10.0"
+serde = { version = "1.0.203", features = ["derive"] }
+serde_json = "1.0.117"
+zip = "2.1.1"
