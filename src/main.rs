@@ -1,6 +1,6 @@
 #![feature(path_file_prefix)]
 
-use std::{path::PathBuf, str::FromStr};
+use std::path::PathBuf;
 
 use cache::ImageCache;
 use clap::Parser;
@@ -8,7 +8,7 @@ use output::{
     AuthorJson, AuthorsJson, OutputAuthors, OutputBuilder, OutputPostMetadata, OutputPosts,
     PostJson,
 };
-use utils::{cyrb53, get_image_size, parse_dir, FileType};
+use utils::{get_image_size, parse_dir, FileType};
 
 mod args;
 mod author;

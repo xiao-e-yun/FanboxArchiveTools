@@ -1,16 +1,13 @@
 use std::{
     fs,
-    io::Write,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
-use clap::{builder::Str, Args};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 use crate::{
-    author,
     post::Post,
-    utils::{cyrb53, DefinedFile},
+    utils::cyrb53,
 };
 
 #[derive(Debug, Clone, Hash, Serialize, Deserialize)]
