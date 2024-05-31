@@ -48,15 +48,16 @@ impl OutputBuilder {
                     fs::write(full_path, data).unwrap();
                 }
                 OutputType::File(from, to) => {
+                    let full_from = from.canonicalize().unwrap();
                     let full_to = root.join(to);
-                    if full_to.exists() {
+                    if fs::read_link(&full_to).is_ok() {
                         continue;
                     }
 
                     #[cfg(unix)]
-                    std::os::unix::fs::symlink(&from, &full_to).unwrap();
+                    std::os::unix::fs::symlink(&full_from, &full_to).expect(&format!("Link Error: {:?}\n",&full_to.exists()));
                     #[cfg(windows)]
-                    std::os::windows::fs::symlink_file(&from, &full_to).unwrap();
+                    std::os::windows::fs::symlink_file(&full_from, &full_to).expect(&format!("Link Error: {:?}\n",&full_to));
                 }
             }
         }
