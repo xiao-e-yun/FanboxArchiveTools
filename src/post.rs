@@ -85,7 +85,12 @@ impl PostFiles {
                             }
 
                             let outpath = file.mangled_name();
-                            let outpath = format!("{}.{}",cyrb53(outpath.to_str().unwrap()), outpath.extension().unwrap_or_default().to_str().unwrap());
+                            let ext = outpath.extension().unwrap_or_default().to_str().unwrap();
+                            let outpath = format!("{}.{}",cyrb53(outpath.to_str().unwrap()), ext);
+
+                            if ["psd"].contains(&ext) {
+                                println!("Ignoring: {:?}", outpath);
+                            }
 
                             let outpath =
                                 parent.join(format!("{}.{}", prefix, outpath.replace("/", ".")));
