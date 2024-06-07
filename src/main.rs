@@ -1,82 +1,75 @@
 #![feature(path_file_prefix)]
 
-use std::path::PathBuf;
-
+use author::archive_author;
 use cache::ImageCache;
 use clap::Parser;
-use output::{
-    AuthorJson, AuthorsJson, OutputAuthors, OutputBuilder, OutputPostMetadata, OutputPosts,
-    PostJson,
-};
-use utils::{get_image_size, parse_dir, FileType};
+use log::info;
+use output::build;
+use post::archive_posts_files;
+use post_archiver::{ArchiveAuthor, ArchiveAuthorsList};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use utils::{parse_dir, FileType};
 
-mod args;
+mod config;
 mod author;
 mod cache;
+pub mod files;
 mod output;
 mod post;
 mod utils;
 
 fn main() {
-    let args = args::Args::parse();
+    let config = config::Config::parse();
     let time = std::time::Instant::now();
+    env_logger::builder().filter_level(config.log_level()).init();
 
-    if !args.quiet {
-        println!("\n=Init=====================================\n");
-        println!("Input Folder: {}", args.input.display());
-        println!("Output Folder: {}", args.output.display());
+    info!("");
+    info!("=Init=====================================");
+    info!("");
+    info!("Input Folder: {}", config.input.display());
+    info!("Output Folder: {}", config.output.display());
+
+    if !config.output.exists() {
+        std::fs::create_dir_all(&config.output).unwrap();
+        info!("`{}` output folder created", config.output.display());
     }
 
-    if !args.output.exists() {
-        std::fs::create_dir_all(&args.output).unwrap();
-        println!("`{}` output folder created", args.output.display());
-    }
+    info!("");
+    info!("=Reading==================================");
+    info!("");
+    
+    
+    
 
-    let authors = parse_dir(&args.input, FileType::Folder);
-    let mut authors = authors
-        .into_iter()
-        .map(|author| author.into())
-        .collect::<Vec<author::Author>>();
+    let cache = ImageCache::load(&config.input, config.force);
 
-    if !args.quiet {
-        // display authors
-        let authors_len = authors.len();
-        println!("\n=Authors==================================\n");
+    let author_dirs = parse_dir(&config.input, FileType::Folder);
+    let (authors, posts, files) = author_dirs.par_iter().map(|author_dir| {
+            //collect
+            let (posts,files) = archive_posts_files(&author_dir, &cache);
+            let author: ArchiveAuthor = archive_author(&author_dir, &posts);
 
-        let mut total_posts = 0;
-        let mut total_files = 0;
-        for author in authors.clone() {
-            println!("+ Author: {}", author.name);
-            let post_len = author.posts.len();
-            let files_len = author
-                .posts
-                .iter()
-                .map(|post| post.files.len())
-                .sum::<usize>();
-            println!("|- Total Posts: {}", post_len);
-            println!("|- Total Files: {}", files_len);
-            println!("");
-            total_posts += post_len;
-            total_files += files_len;
+            //log
+            info!("+ Author: {}", author.name);
+            info!("|- Total Posts: {}", posts.len());
+            info!("|- Total Files: {}", files.len());
+
+            (vec![author],posts,files)
         }
+    ).reduce(||(vec![],vec![],vec![]), |mut a,b|{
+        a.0.extend(b.0);
+        a.1.extend(b.1);
+        a.2.extend(b.2);
+        a
+    });
 
-        println!("Total Authors: {}", authors_len);
-        println!("Total Posts: {}", total_posts);
-        println!("Total Files: {}", total_files);
-    }
+    let author_list = ArchiveAuthorsList::from_vector(authors.clone());
 
-    if !args.quiet {
-        println!("\n=Read Iamges Size=========================\n");
-    }
+    cache.save(&config.input);
 
-    let force = args.force;
-    let mut cache = ImageCache::load(&args.input, force).unwrap_or(ImageCache::new(force));
-    get_image_size(&mut authors, &mut cache);
-    cache.save(&args.input);
-
-    if !args.quiet {
-        println!("\n=Writing & Linking========================\n");
-    }
+    info!("");
+    info!("=Writing & Linking========================");
+    info!("");
 
     // expected output
     //
@@ -87,59 +80,10 @@ fn main() {
     //     - post.json
     //     - [files]
     //
+    build(config, author_list, authors, posts, files);
 
-    let mut builder = OutputBuilder::new(args.output);
-    let mut authors_output: AuthorsJson = vec![];
-    authors.sort_by(|a,b|a.name.cmp(&b.name));
-    for author in authors.iter() {
-        println!("Checking: {}", author.name);
-
-        let author_path = PathBuf::from(author.name.clone());
-        builder.folder(author_path.clone());
-
-        let mut author_thumb = None;
-        let mut posts_output: AuthorJson = vec![];
-        let mut posts = author.posts.clone();
-        posts.sort_by(|a,b|b.date().partial_cmp(&a.date()).unwrap());
-        for post in posts {
-            let (post_path, post_output, files) = OutputPosts::new(post.clone());
-            let post_path = author_path.join(post_path);
-            builder.folder(post_path.clone());
-
-            for (from, to) in files {
-                builder.copy(from, post_path.join(to));
-            }
-
-            if author_thumb.is_none() {
-                author_thumb = post_output.thumb();
-            }
-
-            let postmeta: PostJson = OutputPostMetadata::new(post);
-            builder.write(
-                post_path.join("post.json"),
-                serde_json::to_string(&postmeta).unwrap(),
-            );
-            posts_output.push(post_output);
-        }
-
-        builder.write(
-            author_path.join("author.json"),
-            serde_json::to_string(&posts_output).unwrap(),
-        );
-        authors_output.push(OutputAuthors::new(author.name.clone(), author_thumb));
-    }
-    builder.write(
-        PathBuf::from("authors.json"),
-        serde_json::to_string(&authors_output).unwrap(),
-    );
-
-    if !args.quiet {
-        println!("Building");
-    }
-    builder.finish();
-
-    if !args.quiet {
-        println!("\n=All done================================\n");
-        println!("Time: {} ms", time.elapsed().as_millis());
-    }
+    info!("");
+    info!("=All done================================");
+    info!("");
+    info!("Time: {} ms", time.elapsed().as_millis());
 }

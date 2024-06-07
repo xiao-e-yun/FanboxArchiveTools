@@ -4,28 +4,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{author::Author, cache::ImageCache};
-
-pub fn get_image_size(authors:&mut Vec<Author>, cache: &mut ImageCache) {
-    for author in authors.iter_mut() {
-        for post in &mut author.posts {
-            for (image, size) in &mut post.files.images {
-                if let Some(image_size) = cache.get(&image.path) {
-                    *size = *image_size;
-                } else {
-                    let image_size = imagesize::size(&image.path).unwrap_or(imagesize::ImageSize {
-                        width: 0,
-                        height: 0,
-                    });
-                    let image_size = (image_size.width as u32, image_size.height as u32);
-                    cache.insert(image.path.clone(), image_size);
-                    *size = image_size;
-                }
-            }
-        }
-    }
-}
-
 pub fn parse_dir(path: &Path, filter: FileType) -> Vec<DefinedFile> {
     let files = fs::read_dir(path).expect(&format!("`{}` folder not found", path.display()));
     let mut output: Vec<DefinedFile> = vec![];

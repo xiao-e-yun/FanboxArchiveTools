@@ -1,51 +1,55 @@
 use std::{
     collections::HashMap,
-    fs::File,
-    io::BufReader,
-    path::{Path, PathBuf},
+    fs::{self, File},
+    path::{Path, PathBuf}, sync::{Arc, Mutex},
 };
 
-use serde::{Deserialize, Serialize};
+use log::info;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ImageCache {
-    inner: HashMap<PathBuf, (u32, u32)>,
+    inner: Arc<Mutex<HashMap<PathBuf, (u32, u32)>>>,
     pub ignore: bool,
 }
 
 impl ImageCache {
     pub fn new(ignore: bool) -> Self {
         Self {
-            inner: HashMap::new(),
+            inner: Arc::new(Mutex::new(HashMap::new())),
             ignore,
         }
     }
-    pub fn insert(&mut self, key: PathBuf, value: (u32, u32)) {
+    pub fn insert(&self, key: PathBuf, value: (u32, u32)) {
         if self.ignore {
             return;
         }
-        self.inner.insert(key, value);
+        self.inner.lock().unwrap().insert(key, value);
     }
-    pub fn get(&self, key: &Path) -> Option<&(u32, u32)> {
-        self.inner.get(key)
+    pub fn get(&self, key: &Path) -> Option<(u32, u32)> {
+        self.inner.lock().unwrap().get(key).cloned()
     }
-    pub fn load(path: &Path, ignore: bool) -> Option<Self> {
-        let data: HashMap<PathBuf, (u32, u32)> = serde_json::from_reader(BufReader::new(
-            File::open(path.join("image-cache.json")).ok()?,
-        ))
-        .ok()?;
-        let mut cache = ImageCache::new(ignore);
-        cache.inner = data;
-        Some(cache)
+    pub fn load(path: &Path, ignore: bool) -> Self {
+        if ignore {
+            return Self::new(ignore);
+        };
+
+        let json = fs::read(path.join("image-cache.json")).unwrap_or_default();
+        let data: HashMap<PathBuf, (u32, u32)> =
+            serde_json::from_slice(json.as_slice()).unwrap_or_default();
+
+        ImageCache {
+            inner: Arc::new(Mutex::new(data)),
+            ignore,
+        }
     }
     pub fn save(&self, path: &Path) {
         if self.ignore {
-            println!("Image cache is ignored");
+            info!("Image cache is ignored");
             return;
         }
 
         let file = File::create(path.join("image-cache.json")).unwrap();
-        serde_json::to_writer(file, &self.inner).unwrap();
-        println!("Image cache saved");
+        serde_json::to_writer(file, &*self.inner.lock().unwrap()).unwrap();
+        info!("Image cache saved");
     }
 }
