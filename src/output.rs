@@ -1,4 +1,8 @@
-use std::{collections::HashSet, fs, path::PathBuf};
+use std::{
+    collections::HashSet,
+    fs::{self, hard_link},
+    path::PathBuf,
+};
 
 use log::info;
 use post_archiver::{
@@ -41,8 +45,10 @@ pub fn build(
     let mut skips = HashSet::new();
     for mut author in authors.into_iter() {
         let output = join_and_mkdir(&output, &author.id);
-        if let Some(old) =
-            serde_json::from_slice::<ArchiveAuthor>(&fs::read(&output.join("author.json")).unwrap_or_default()).ok()
+        if let Some(old) = serde_json::from_slice::<ArchiveAuthor>(
+            &fs::read(&output.join("author.json")).unwrap_or_default(),
+        )
+        .ok()
         {
             old.posts.iter().for_each(|p| {
                 skips.insert((p.author.clone(), p.title.clone()));
@@ -79,16 +85,15 @@ pub fn build(
             continue;
         }
 
-        if fs::read_link(&output).is_ok() {
+        if output.exists() {
             continue;
         }
 
-        #[cfg(unix)]
-        std::os::unix::fs::symlink(&source, &output)
-            .expect(&format!("Link Error: {:?} {:?}", &source,&output));
-        #[cfg(windows)]
-        std::os::windows::fs::symlink_file(&source, &output)
-            .expect(&format!("Link Error: {:?}", &output));
+        if fs::read_link(&output).is_ok() {
+            fs::remove_file(&output).unwrap();
+        }
+
+        hard_link(&source, &output).expect(&format!("Link Error: {:?} {:?}", &source, &output))
     }
 }
 
